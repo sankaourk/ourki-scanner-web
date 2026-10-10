@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#123b2a">
+  <title>Ourki BoutikPro - Scanner</title>
+
+  <script src="https://unpkg.com/html5-qrcode"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      background: #f3f6f4;
+      color: #17251d;
+    }
+
+    main {
+      max-width: 520px;
+      margin: 0 auto;
+      padding: 20px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 4px 18px #00000012;
+    }
+
+    h1 { font-size: 24px; text-align: center; }
+    p { line-height: 1.5; }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      margin-top: 12px;
+      border: 0;
+      border-radius: 10px;
+      background: #176b43;
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+    }
+
+    button:disabled { opacity: .5; }
+
+    #reader {
+      width: 100%;
+      margin-top: 18px;
+      overflow: hidden;
+    }
+
+    #result {
+      margin-top: 18px;
+      padding: 14px;
+      border-radius: 10px;
+      background: #edf5ef;
+      overflow-wrap: anywhere;
+    }
+
+    .note { color: #52645a; font-size: 14px; }
+  </style>
+</head>
+
+<body>
+<main>
+  <h1>Ourki BoutikPro</h1>
+  <p>Scanner de codes-barres</p>
+  <p class="note">
+    Autorise l'accès à la caméra lorsque Safari le demande.
+    Place le code-barres devant la caméra.
+  </p>
+
+  <button id="start">Démarrer le scanner</button>
+  <button id="stop" disabled>Arrêter le scanner</button>
+
+  <div id="reader"></div>
+
+  <div id="result" role="status" aria-live="polite">
+    En attente d'un code-barres…
+  </div>
+</main>
+
+<script>
+(() => {
+  const startButton = document.getElementById("start");
+  const stopButton = document.getElementById("stop");
+  const result = document.getElementById("result");
+
+  let scanner = null;
+  let running = false;
+  let lastCode = "";
+
+  function showMessage(message) {
+    result.textContent = message;
+  }
+
+  async function stopScanner() {
+    if (!scanner || !running) return;
+
+    try {
+      await scanner.stop();
+      running = false;
+      startButton.disabled = false;
+      stopButton.disabled = true;
+      showMessage("Scanner arrêté.");
+    } catch (error) {
+      showMessage("Impossible d'arrêter le scanner proprement.");
+    }
+  }
+
+  startButton.addEventListener("click", async () => {
+    if (running) return;
+
+    if (!window.isSecureContext) {
+      showMessage(
+        "La caméra nécessite une adresse HTTPS sécurisée."
+      );
+      return;
+    }
+
+    if (!window.Html5Qrcode) {
+      showMessage(
+        "Le scanner n'a pas pu se charger. Vérifie ta connexion Internet."
+      );
+      return;
+    }
+
+    startButton.disabled = true;
+    showMessage("Préparation de la caméra…");
+
+    try {
+      scanner = new Html5Qrcode("reader");
+
+      await scanner.start(
+        { facingMode: "environment" },
+        {
+          fps: 12,
+          qrbox: { width: 260, height: 150 },
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.ITF,
+            Html5QrcodeSupportedFormats.QR_CODE
+          ]
+        },
+        async (decodedText) => {
+          if (!decodedText || decodedText === lastCode) return;
+
+          lastCode = decodedText;
+          showMessage("Code détecté : " + decodedText);
+
+          if (navigator.vibrate) navigator.vibrate(100);
+
+          await stopScanner();
+          lastCode = "";
+        },
+        () => {}
+      );
+
+      running = true;
+      stopButton.disabled = false;
+      showMessage("Caméra active. Présente un code-barres.");
+    } catch (error) {
+      running = false;
+      startButton.disabled = false;
+      stopButton.disabled = true;
+      showMessage(
+        "Caméra inaccessible. Vérifie l'autorisation Safari et que la page utilise HTTPS."
+      );
+    }
+  });
+
+  stopButton.addEventListener("click", stopScanner);
+})();
+</script>
+</body>
+</html>
