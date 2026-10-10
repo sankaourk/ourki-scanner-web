@@ -13,7 +13,7 @@
 
     body {
       margin: 0;
-      padding: 20px;
+      padding: 16px;
       font-family: Arial, sans-serif;
       background: #f3f6f4;
       color: #17251d;
@@ -22,13 +22,17 @@
     main {
       max-width: 520px;
       margin: 0 auto;
-      padding: 20px;
+      padding: 18px;
       background: white;
       border-radius: 16px;
       box-shadow: 0 4px 18px #00000012;
     }
 
-    h1 { font-size: 24px; text-align: center; }
+    h1 {
+      font-size: 24px;
+      text-align: center;
+    }
+
     p { line-height: 1.5; }
 
     button {
@@ -51,25 +55,36 @@
       overflow: hidden;
     }
 
+    #reader video {
+      object-fit: cover;
+    }
+
     #result {
       margin-top: 18px;
       padding: 14px;
       border-radius: 10px;
       background: #edf5ef;
       overflow-wrap: anywhere;
+      line-height: 1.5;
     }
 
-    .note { color: #52645a; font-size: 14px; }
+    .note {
+      color: #52645a;
+      font-size: 14px;
+    }
   </style>
 </head>
 
 <body>
 <main>
   <h1>Ourki BoutikPro</h1>
+
   <p>Scanner de codes-barres</p>
+
   <p class="note">
-    Autorise l'accès à la caméra lorsque Safari le demande.
-    Place le code-barres devant la caméra.
+    Autorise la caméra dans Safari.
+    Place le code-barres bien à plat, face à la caméra.
+    Évite les reflets et rapproche ou éloigne lentement le produit.
   </p>
 
   <button id="start">Démarrer le scanner</button>
@@ -90,7 +105,18 @@
 
   let scanner = null;
   let running = false;
-  let lastCode = "";
+  let processing = false;
+
+  const supportedFormats = [
+    Html5QrcodeSupportedFormats.EAN_13,
+    Html5QrcodeSupportedFormats.EAN_8,
+    Html5QrcodeSupportedFormats.UPC_A,
+    Html5QrcodeSupportedFormats.UPC_E,
+    Html5QrcodeSupportedFormats.CODE_128,
+    Html5QrcodeSupportedFormats.CODE_39,
+    Html5QrcodeSupportedFormats.ITF,
+    Html5QrcodeSupportedFormats.QR_CODE
+  ];
 
   function showMessage(message) {
     result.textContent = message;
@@ -102,11 +128,11 @@
     try {
       await scanner.stop();
       running = false;
-      startButton.disabled = false;
       stopButton.disabled = true;
+      startButton.disabled = false;
       showMessage("Scanner arrêté.");
     } catch (error) {
-      showMessage("Impossible d'arrêter le scanner proprement.");
+      showMessage("Erreur lors de l'arrêt. Recharge la page si nécessaire.");
     }
   }
 
@@ -114,64 +140,85 @@
     if (running) return;
 
     if (!window.isSecureContext) {
-      showMessage(
-        "La caméra nécessite une adresse HTTPS sécurisée."
-      );
+      showMessage("La caméra nécessite une adresse HTTPS sécurisée.");
       return;
     }
 
-    if (!window.Html5Qrcode) {
+    if (
+      !window.Html5Qrcode ||
+      !window.Html5QrcodeSupportedFormats
+    ) {
       showMessage(
-        "Le scanner n'a pas pu se charger. Vérifie ta connexion Internet."
+        "La bibliothèque du scanner n'est pas chargée. Vérifie Internet."
       );
       return;
     }
 
     startButton.disabled = true;
+    stopButton.disabled = true;
     showMessage("Préparation de la caméra…");
 
     try {
-      scanner = new Html5Qrcode("reader");
+      scanner = new Html5Qrcode("reader", {
+        formatsToSupport: supportedFormats,
+        verbose: false
+      });
 
       await scanner.start(
         { facingMode: "environment" },
         {
-          fps: 12,
-          qrbox: { width: 260, height: 150 },
-          formatsToSupport: [
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.EAN_8,
-            Html5QrcodeSupportedFormats.UPC_A,
-            Html5QrcodeSupportedFormats.UPC_E,
-            Html5QrcodeSupportedFormats.CODE_128,
-            Html5QrcodeSupportedFormats.CODE_39,
-            Html5QrcodeSupportedFormats.ITF,
-            Html5QrcodeSupportedFormats.QR_CODE
-          ]
+          fps: 15,
+          aspectRatio: 1.777778,
+          qrbox: (viewfinderWidth, viewfinderHeight) => {
+            const width = Math.floor(viewfinderWidth * 0.92);
+            const height = Math.min(
+              160,
+              Math.floor(viewfinderHeight * 0.65)
+            );
+
+            return {
+              width: Math.max(150, width),
+              height: Math.max(80, height)
+            };
+          },
+          disableFlip: true
         },
         async (decodedText) => {
-          if (!decodedText || decodedText === lastCode) return;
+          if (!decodedText || processing) return;
 
-          lastCode = decodedText;
+          processing = true;
           showMessage("Code détecté : " + decodedText);
 
-          if (navigator.vibrate) navigator.vibrate(100);
+          if (navigator.vibrate) {
+            navigator.vibrate(100);
+          }
 
           await stopScanner();
-          lastCode = "";
+          processing = false;
         },
-        () => {}
+        () => {
+          // Les échecs de lecture pendant le cadrage sont normaux.
+        }
       );
 
       running = true;
       stopButton.disabled = false;
-      showMessage("Caméra active. Présente un code-barres.");
+      showMessage(
+        "Caméra active. Place un code-barres dans la zone de lecture."
+      );
+
     } catch (error) {
       running = false;
       startButton.disabled = false;
       stopButton.disabled = true;
+
+      const details = error && error.message
+        ? error.message
+        : String(error);
+
       showMessage(
-        "Caméra inaccessible. Vérifie l'autorisation Safari et que la page utilise HTTPS."
+        "Impossible de démarrer le scanner. Vérifie l'autorisation " +
+        "de caméra et recharge la page. Détail : " + details
       );
     }
   });
