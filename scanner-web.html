@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -6,10 +7,12 @@
   <meta name="theme-color" content="#123b2a">
   <title>Ourki BoutikPro - Scanner</title>
 
-  <script src="https://unpkg.com/html5-qrcode"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <style>
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+    }
 
     body {
       margin: 0;
@@ -22,55 +25,101 @@
     main {
       max-width: 520px;
       margin: 0 auto;
-      padding: 18px;
-      background: white;
+      padding: 20px;
+      background: #fff;
       border-radius: 16px;
       box-shadow: 0 4px 18px #00000012;
     }
 
     h1 {
-      font-size: 24px;
+      font-size: 26px;
       text-align: center;
     }
 
-    p { line-height: 1.5; }
-
-    button {
-      width: 100%;
-      padding: 14px;
-      margin-top: 12px;
-      border: 0;
-      border-radius: 10px;
-      background: #176b43;
-      color: white;
-      font-size: 16px;
-      font-weight: bold;
-    }
-
-    button:disabled { opacity: .5; }
-
-    #reader {
-      width: 100%;
-      margin-top: 18px;
-      overflow: hidden;
-    }
-
-    #reader video {
-      object-fit: cover;
-    }
-
-    #result {
-      margin-top: 18px;
-      padding: 14px;
-      border-radius: 10px;
-      background: #edf5ef;
-      overflow-wrap: anywhere;
+    p {
       line-height: 1.5;
     }
 
     .note {
       color: #52645a;
       font-size: 14px;
+    }
+
+    button {
+      width: 100%;
+      padding: 15px;
+      margin-top: 12px;
+      border: 0;
+      border-radius: 10px;
+      background: #176b43;
+      color: #fff;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    #stop {
+      background: #52645a;
+    }
+
+    button:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    #reader {
+      width: 100%;
+      margin-top: 18px;
+      overflow: hidden;
+      border-radius: 12px;
+      background: #101510;
+    }
+
+    #reader video {
+      display: block;
+      width: 100%;
+      height: auto;
+      object-fit: contain;
+    }
+
+    #reader__dashboard_section_csr button {
+      width: auto;
+      margin: 6px;
+    }
+
+    #result {
+      margin-top: 18px;
+      padding: 15px;
+      border-radius: 10px;
+      background: #edf5ef;
+      overflow-wrap: anywhere;
+      line-height: 1.5;
+    }
+
+    #result.success {
+      background: #dff5e6;
+      color: #145b32;
+      font-weight: bold;
+    }
+
+    #result.error {
+      background: #fff0ed;
+      color: #8b2519;
+    }
+
+    .code-value {
+      display: block;
+      margin-top: 8px;
+      font-size: 24px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      overflow-wrap: anywhere;
+    }
+
+    .hint {
+      margin-top: 12px;
+      font-size: 13px;
+      color: #52645a;
     }
   </style>
 </head>
@@ -82,65 +131,143 @@
   <p>Scanner de codes-barres</p>
 
   <p class="note">
-    Autorise la caméra dans Safari.
-    Place le code-barres bien à plat, face à la caméra.
-    Évite les reflets et rapproche ou éloigne lentement le produit.
+    Autorise la caméra dans Safari. Place les barres horizontalement
+    face à la caméra. Évite les reflets et tiens le téléphone stable.
+    Le code doit être entièrement visible et suffisamment net.
   </p>
 
-  <button id="start">Démarrer le scanner</button>
-  <button id="stop" disabled>Arrêter le scanner</button>
+  <button id="start" type="button">Démarrer le scanner</button>
+  <button id="stop" type="button" disabled>Arrêter le scanner</button>
 
   <div id="reader"></div>
 
   <div id="result" role="status" aria-live="polite">
-    En attente d'un code-barres…
+    En attente du démarrage…
   </div>
+
+  <p class="hint">
+    Cette page lit le code-barres et affiche son numéro.
+    Elle n'est pas encore reliée au catalogue de produits ni au panier.
+  </p>
 </main>
 
 <script>
 (() => {
+  "use strict";
+
   const startButton = document.getElementById("start");
   const stopButton = document.getElementById("stop");
   const result = document.getElementById("result");
 
   let scanner = null;
   let running = false;
+  let starting = false;
   let processing = false;
+  let stopping = false;
 
-  const supportedFormats = [
+  const formats = [
     Html5QrcodeSupportedFormats.EAN_13,
     Html5QrcodeSupportedFormats.EAN_8,
     Html5QrcodeSupportedFormats.UPC_A,
     Html5QrcodeSupportedFormats.UPC_E,
     Html5QrcodeSupportedFormats.CODE_128,
     Html5QrcodeSupportedFormats.CODE_39,
-    Html5QrcodeSupportedFormats.ITF,
-    Html5QrcodeSupportedFormats.QR_CODE
+    Html5QrcodeSupportedFormats.ITF
   ];
 
-  function showMessage(message) {
+  function showMessage(message, type = "") {
+    result.className = type;
     result.textContent = message;
   }
 
-  async function stopScanner() {
-    if (!scanner || !running) return;
+  function makeScanArea(width, height) {
+    // Zone horizontale pour les codes-barres classiques.
+    const boxWidth = Math.max(
+      160,
+      Math.min(Math.floor(width * 0.94), 420)
+    );
+
+    const boxHeight = Math.max(
+      80,
+      Math.min(Math.floor(boxWidth * 0.38), Math.floor(height * 0.35))
+    );
+
+    return {
+      width: Math.min(boxWidth, width),
+      height: Math.min(boxHeight, height)
+    };
+  }
+
+  async function stopScanner(message = "Scanner arrêté.") {
+    if (stopping) return;
+
+    stopping = true;
 
     try {
-      await scanner.stop();
+      if (scanner && running) {
+        await scanner.stop();
+      }
+
       running = false;
-      stopButton.disabled = true;
       startButton.disabled = false;
-      showMessage("Scanner arrêté.");
+      stopButton.disabled = true;
+      showMessage(message);
     } catch (error) {
-      showMessage("Erreur lors de l'arrêt. Recharge la page si nécessaire.");
+      running = false;
+      startButton.disabled = false;
+      stopButton.disabled = true;
+      showMessage(
+        "L'arrêt de la caméra a rencontré un problème. Recharge la page si nécessaire.",
+        "error"
+      );
+    } finally {
+      stopping = false;
     }
   }
 
+  async function handleDetection(decodedText, decodedResult) {
+    if (!decodedText || processing || !running) return;
+
+    processing = true;
+
+    const formatName =
+      decodedResult &&
+      decodedResult.result &&
+      decodedResult.result.format &&
+      typeof decodedResult.result.format.formatName === "string"
+        ? decodedResult.result.format.formatName
+        : "Code-barres";
+
+    showMessage(
+      formatName + " détecté : " + decodedText,
+      "success"
+    );
+
+    const value = document.createElement("span");
+    value.className = "code-value";
+    value.textContent = decodedText;
+    result.appendChild(value);
+
+    if (navigator.vibrate) {
+      try {
+        navigator.vibrate(100);
+      } catch (_) {
+        // La vibration n'est pas disponible partout.
+      }
+    }
+
+    await stopScanner("Lecture réussie.");
+    processing = false;
+  }
+
   startButton.addEventListener("click", async () => {
-    if (running) return;
+    if (starting || running || stopping) return;
 
     if (!window.isSecureContext) {
-      showMessage("La caméra nécessite une adresse HTTPS sécurisée.");
+      showMessage(
+        "La caméra nécessite une page HTTPS sécurisée.",
+        "error"
+      );
       return;
     }
 
@@ -149,64 +276,44 @@
       !window.Html5QrcodeSupportedFormats
     ) {
       showMessage(
-        "La bibliothèque du scanner n'est pas chargée. Vérifie Internet."
+        "Le lecteur n'est pas chargé. Vérifie la connexion Internet puis recharge la page.",
+        "error"
       );
       return;
     }
 
+    starting = true;
+    processing = false;
     startButton.disabled = true;
     stopButton.disabled = true;
     showMessage("Préparation de la caméra…");
 
     try {
       scanner = new Html5Qrcode("reader", {
-        formatsToSupport: supportedFormats,
+        formatsToSupport: formats,
         verbose: false
       });
 
       await scanner.start(
         { facingMode: "environment" },
         {
-          fps: 15,
-          aspectRatio: 1.777778,
-          qrbox: (viewfinderWidth, viewfinderHeight) => {
-            const width = Math.floor(viewfinderWidth * 0.92);
-            const height = Math.min(
-              160,
-              Math.floor(viewfinderHeight * 0.65)
-            );
-
-            return {
-              width: Math.max(150, width),
-              height: Math.max(80, height)
-            };
-          },
+          fps: 10,
+          qrbox: makeScanArea,
+          aspectRatio: 1.333333,
           disableFlip: true
         },
-        async (decodedText) => {
-          if (!decodedText || processing) return;
-
-          processing = true;
-          showMessage("Code détecté : " + decodedText);
-
-          if (navigator.vibrate) {
-            navigator.vibrate(100);
-          }
-
-          await stopScanner();
-          processing = false;
-        },
+        handleDetection,
         () => {
-          // Les échecs de lecture pendant le cadrage sont normaux.
+          // Les échecs ponctuels de lecture sont normaux.
+          // Le lecteur continue d'essayer à chaque image.
         }
       );
 
       running = true;
       stopButton.disabled = false;
       showMessage(
-        "Caméra active. Place un code-barres dans la zone de lecture."
+        "Caméra active. Place le code-barres horizontalement dans le cadre."
       );
-
     } catch (error) {
       running = false;
       startButton.disabled = false;
@@ -217,13 +324,19 @@
         : String(error);
 
       showMessage(
-        "Impossible de démarrer le scanner. Vérifie l'autorisation " +
-        "de caméra et recharge la page. Détail : " + details
+        "Impossible de démarrer la caméra. Vérifie l'autorisation Safari et ferme les autres applications utilisant la caméra. Détail : " +
+        details,
+        "error"
       );
+    } finally {
+      starting = false;
     }
   });
 
-  stopButton.addEventListener("click", stopScanner);
+  stopButton.addEventListener("click", async () => {
+    if (starting) return;
+    await stopScanner();
+  });
 })();
 </script>
 </body>
