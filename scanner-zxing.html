@@ -1,0 +1,325 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#123b2a">
+  <title>Ourki BoutikPro - Test ZXing</title>
+
+  <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 16px;
+      font-family: Arial, sans-serif;
+      color: #17251d;
+      background: #f3f6f4;
+    }
+
+    main {
+      max-width: 520px;
+      margin: auto;
+      padding: 20px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 4px 18px #00000012;
+    }
+
+    h1 { text-align: center; font-size: 25px; }
+
+    p { line-height: 1.5; }
+
+    button, .file-label {
+      display: block;
+      width: 100%;
+      padding: 15px;
+      margin-top: 12px;
+      border: 0;
+      border-radius: 10px;
+      background: #176b43;
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    #stop { background: #52645a; }
+    .file-label { background: #244e83; }
+
+    button:disabled { opacity: .5; }
+
+    #reader video {
+      display: block;
+      width: 100%;
+      margin-top: 16px;
+      border-radius: 12px;
+      background: #111;
+    }
+
+    #photo {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+    }
+
+    #preview {
+      display: none;
+      width: 100%;
+      margin-top: 14px;
+      border-radius: 10px;
+    }
+
+    #result {
+      margin-top: 18px;
+      padding: 15px;
+      border-radius: 10px;
+      background: #edf5ef;
+      overflow-wrap: anywhere;
+      line-height: 1.5;
+    }
+
+    .success { background: #dff5e6 !important; color: #145b32; }
+    .error { background: #fff0ed !important; color: #8b2519; }
+    .code { display: block; margin-top: 8px; font-size: 24px; font-weight: bold; }
+  </style>
+</head>
+
+<body>
+<main>
+  <h1>Ourki BoutikPro</h1>
+  <p>Test indépendant du moteur de lecture ZXing.</p>
+
+  <button id="start" type="button">Démarrer la caméra</button>
+  <button id="stop" type="button" disabled>Arrêter la caméra</button>
+
+  <label class="file-label" for="photo">Lire une photo de code-barres</label>
+  <input id="photo" type="file" accept="image/*" capture="environment">
+
+  <img id="preview" alt="Photo à analyser">
+  <div id="reader"></div>
+
+  <div id="result" role="status" aria-live="polite">
+    Prêt pour le test.
+  </div>
+</main>
+
+<script>
+(() => {
+  "use strict";
+
+  const startButton = document.getElementById("start");
+  const stopButton = document.getElementById("stop");
+  const photoInput = document.getElementById("photo");
+  const preview = document.getElementById("preview");
+  const reader = document.getElementById("reader");
+  const result = document.getElementById("result");
+
+  let codeReader = null;
+  let controls = null;
+  let running = false;
+  let starting = false;
+  let stopping = false;
+  let processing = false;
+  let imageUrl = null;
+
+  function message(text, type = "") {
+    result.className = type;
+    result.textContent = text;
+  }
+
+  function showCode(text, format) {
+    result.className = "success";
+    result.replaceChildren(
+      document.createTextNode("Code détecté" + (format ? " (" + format + ")" : "") + " :")
+    );
+
+    const value = document.createElement("span");
+    value.className = "code";
+    value.textContent = text;
+    result.appendChild(value);
+  }
+
+  function makeReader() {
+    const hints = new Map();
+    hints.set(
+      ZXing.DecodeHintType.POSSIBLE_FORMATS,
+      [
+        ZXing.BarcodeFormat.EAN_13,
+        ZXing.BarcodeFormat.EAN_8,
+        ZXing.BarcodeFormat.UPC_A,
+        ZXing.BarcodeFormat.UPC_E,
+        ZXing.BarcodeFormat.CODE_128,
+        ZXing.BarcodeFormat.CODE_39,
+        ZXing.BarcodeFormat.ITF
+      ]
+    );
+
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+
+    const readerInstance = new ZXing.BrowserMultiFormatReader(hints);
+    readerInstance.timeBetweenDecodingAttempts = 150;
+
+    return readerInstance;
+  }
+
+  async function stopCamera(showStatus = true) {
+    if (stopping) return;
+    stopping = true;
+
+    try {
+      if (controls) {
+        controls.stop();
+        controls = null;
+      }
+
+      if (codeReader) {
+        codeReader.reset();
+      }
+
+      running = false;
+      stopButton.disabled = true;
+      startButton.disabled = false;
+
+      if (showStatus) message("Caméra arrêtée.");
+    } catch (error) {
+      running = false;
+      stopButton.disabled = true;
+      startButton.disabled = false;
+      message("La caméra n'a pas pu être arrêtée proprement.", "error");
+    } finally {
+      stopping = false;
+    }
+  }
+
+  startButton.addEventListener("click", async () => {
+    if (starting || running || stopping) return;
+
+    if (!window.isSecureContext) {
+      message("La caméra nécessite une page HTTPS.", "error");
+      return;
+    }
+
+    if (!window.ZXing) {
+      message("Le moteur ZXing ne s'est pas chargé. Vérifie Internet et recharge la page.", "error");
+      return;
+    }
+
+    starting = true;
+    processing = false;
+    startButton.disabled = true;
+    stopButton.disabled = true;
+    message("Ouverture de la caméra…");
+
+    try {
+      if (codeReader) codeReader.reset();
+
+      codeReader = makeReader();
+
+      const devices = await ZXing.BrowserCodeReader.listVideoInputDevices();
+
+      if (!devices.length) {
+        throw new Error("Aucune caméra détectée.");
+      }
+
+      const backCamera =
+        devices.find(device => /back|rear|environment|arrière|dos/i.test(device.label)) ||
+        devices[devices.length - 1];
+
+      controls = await codeReader.decodeFromVideoDevice(
+        backCamera.deviceId,
+        "video-preview",
+        (decoded, error, streamControls) => {
+          if (streamControls) controls = streamControls;
+
+          if (decoded && !processing) {
+            processing = true;
+            showCode(decoded.getText(), decoded.getBarcodeFormat());
+            if (navigator.vibrate) {
+              try { navigator.vibrate(100); } catch (_) {}
+            }
+            stopCamera(false);
+          }
+        }
+      );
+
+      running = true;
+      stopButton.disabled = false;
+      message("Caméra active. Place le code-barres dans l'image.");
+    } catch (error) {
+      running = false;
+      startButton.disabled = false;
+      stopButton.disabled = true;
+      message(
+        "Erreur caméra : " + (error && error.message ? error.message : String(error)),
+        "error"
+      );
+    } finally {
+      starting = false;
+    }
+  });
+
+  stopButton.addEventListener("click", async () => {
+    if (starting) return;
+    await stopCamera();
+  });
+
+  photoInput.addEventListener("change", async () => {
+    const file = photoInput.files && photoInput.files[0];
+    if (!file) return;
+
+    if (!window.ZXing) {
+      message("Le moteur ZXing n'est pas chargé. Vérifie Internet.", "error");
+      photoInput.value = "";
+      return;
+    }
+
+    startButton.disabled = true;
+    stopButton.disabled = true;
+    message("Analyse de la photo…");
+
+    try {
+      if (running || controls) await stopCamera(false);
+
+      if (codeReader) codeReader.reset();
+      codeReader = makeReader();
+
+      if (imageUrl) URL.revokeObjectURL(imageUrl);
+      imageUrl = URL.createObjectURL(file);
+      preview.src = imageUrl;
+      preview.style.display = "block";
+
+      await new Promise((resolve, reject) => {
+        preview.onload = resolve;
+        preview.onerror = reject;
+      });
+
+      const decoded = await codeReader.decodeFromImageElement(preview);
+      showCode(decoded.getText(), decoded.getBarcodeFormat());
+    } catch (error) {
+      message(
+        "ZXing n'a pas trouvé de code lisible sur cette photo. Vérifie que les barres sont nettes et assez grandes.",
+        "error"
+      );
+    } finally {
+      if (codeReader) codeReader.reset();
+      running = false;
+      controls = null;
+      startButton.disabled = false;
+      stopButton.disabled = true;
+      photoInput.value = "";
+    }
+  });
+})();
+</script>
+
+<div id="camera-container" hidden>
+  <video id="video-preview" muted playsinline></video>
+</div>
+</body>
+</html>
