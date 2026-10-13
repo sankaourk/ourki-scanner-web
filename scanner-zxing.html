@@ -1,10 +1,11 @@
-
+```html
 <!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#123b2a">
+
   <title>Ourki BoutikPro - Scanner ZXing</title>
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -85,8 +86,9 @@
     #video-preview {
       display: block;
       width: 100%;
-      min-height: 1px;
-      height: auto;
+      min-height: 220px;
+      max-height: 65vh;
+      aspect-ratio: 4 / 3;
       object-fit: contain;
       background: #101510;
     }
@@ -139,13 +141,17 @@
 
 <body>
 <main>
+
   <h1>Ourki BoutikPro</h1>
 
-  <p>Test indépendant du moteur de lecture ZXing.</p>
+  <p>
+    Test indépendant du moteur de lecture ZXing.
+  </p>
 
   <p class="note">
-    Autorise la caméra dans Safari. Place le code-barres
-    bien en face de la caméra, avec un éclairage suffisant.
+    Autorise la caméra dans Safari.
+    Oriente le code-barres vers la caméra
+    et garde-le bien éclairé.
   </p>
 
   <button id="start" type="button">
@@ -170,7 +176,12 @@
   <img id="preview" alt="Photo analysée">
 
   <div id="reader">
-    <video id="video-preview" autoplay muted playsinline></video>
+    <video
+      id="video-preview"
+      autoplay
+      muted
+      playsinline
+    ></video>
   </div>
 
   <div id="result" role="status" aria-live="polite">
@@ -178,9 +189,11 @@
   </div>
 
   <p class="note">
-    Cette page de test affiche uniquement le numéro du code-barres.
-    Elle n'est pas reliée au catalogue ni au panier de la boutique.
+    Cette page de test affiche uniquement le numéro
+    du code-barres. Elle n'est pas reliée au catalogue
+    ni au panier de la boutique.
   </p>
+
 </main>
 
 <script>
@@ -209,6 +222,7 @@
 
   function showCode(text, format) {
     result.className = "success";
+
     result.replaceChildren(
       document.createTextNode(
         "Code détecté" +
@@ -220,13 +234,14 @@
     const value = document.createElement("span");
     value.className = "code";
     value.textContent = text;
+
     result.appendChild(value);
 
     if (navigator.vibrate) {
       try {
         navigator.vibrate(100);
       } catch (_) {
-        // La vibration est facultative.
+        // Vibration facultative.
       }
     }
   }
@@ -234,27 +249,14 @@
   function createReader() {
     const hints = new Map();
 
+    // Essayer tous les formats pris en charge
+    // au lieu de limiter le test à quelques formats.
     hints.set(
-      ZXing.DecodeHintType.POSSIBLE_FORMATS,
-      [
-        ZXing.BarcodeFormat.EAN_13,
-        ZXing.BarcodeFormat.EAN_8,
-        ZXing.BarcodeFormat.UPC_A,
-        ZXing.BarcodeFormat.UPC_E,
-        ZXing.BarcodeFormat.CODE_128,
-        ZXing.BarcodeFormat.CODE_39,
-        ZXing.BarcodeFormat.ITF
-      ]
+      ZXing.DecodeHintType.TRY_HARDER,
+      true
     );
 
-    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-
-    const readerInstance =
-      new ZXing.BrowserMultiFormatReader(hints);
-
-    readerInstance.timeBetweenDecodingAttempts = 150;
-
-    return readerInstance;
+    return new ZXing.BrowserMultiFormatReader(hints);
   }
 
   async function stopCamera(showStatus = true) {
@@ -276,6 +278,13 @@
       processing = false;
 
       video.pause();
+
+      if (video.srcObject) {
+        video.srcObject.getTracks().forEach(track => {
+          track.stop();
+        });
+      }
+
       video.srcObject = null;
 
       startButton.disabled = false;
@@ -284,6 +293,7 @@
       if (showStatus) {
         showMessage("Caméra arrêtée.");
       }
+
     } catch (error) {
       running = false;
       startButton.disabled = false;
@@ -293,6 +303,7 @@
         "Erreur lors de l'arrêt de la caméra. Recharge la page si nécessaire.",
         "error"
       );
+
     } finally {
       stopping = false;
     }
@@ -322,6 +333,7 @@
 
     starting = true;
     processing = false;
+
     startButton.disabled = true;
     stopButton.disabled = true;
 
@@ -334,25 +346,38 @@
 
       codeReader = createReader();
 
-      /*
-       * Aucun appel à listVideoInputDevices().
-       * Un identifiant undefined demande au lecteur de choisir
-       * une caméra disponible selon son implémentation.
-       */
-      controls = await codeReader.decodeFromVideoDevice(
-        undefined,
+      // Demander la caméra arrière et une résolution élevée.
+      const constraints = {
+        audio: false,
+        video: {
+          facingMode: {
+            ideal: "environment"
+          },
+          width: {
+            ideal: 1920
+          },
+          height: {
+            ideal: 1080
+          }
+        }
+      };
+
+      controls = await codeReader.decodeFromConstraints(
+        constraints,
         video,
         (decoded, error) => {
-          if (!decoded || processing) return;
+          if (decoded && !processing) {
+            processing = true;
 
-          processing = true;
+            showCode(
+              decoded.getText(),
+              decoded.getBarcodeFormat()
+            );
 
-          showCode(
-            decoded.getText(),
-            decoded.getBarcodeFormat()
-          );
+            stopCamera(false);
+          }
 
-          stopCamera(false);
+          // L'absence de code dans une image est normale.
         }
       );
 
@@ -360,8 +385,9 @@
       stopButton.disabled = false;
 
       showMessage(
-        "Caméra active. Place un code-barres dans l'image."
+        "Caméra active. Garde le code-barres dans l'image quelques secondes."
       );
+
     } catch (error) {
       running = false;
       controls = null;
@@ -370,7 +396,7 @@
       stopButton.disabled = true;
 
       showMessage(
-        "Impossible de démarrer la caméra : " +
+        "Impossible de démarrer la lecture : " +
         (
           error && error.message
             ? error.message
@@ -378,6 +404,7 @@
         ),
         "error"
       );
+
     } finally {
       starting = false;
     }
@@ -385,11 +412,13 @@
 
   stopButton.addEventListener("click", async () => {
     if (starting) return;
+
     await stopCamera();
   });
 
   photoInput.addEventListener("change", async () => {
-    const file = photoInput.files && photoInput.files[0];
+    const file =
+      photoInput.files && photoInput.files[0];
 
     if (!file) return;
 
@@ -398,6 +427,7 @@
         "Choisis un fichier image valide.",
         "error"
       );
+
       photoInput.value = "";
       return;
     }
@@ -410,6 +440,7 @@
         "Le moteur ZXing n'est pas chargé. Vérifie Internet.",
         "error"
       );
+
       photoInput.value = "";
       return;
     }
@@ -421,6 +452,7 @@
 
     startButton.disabled = true;
     stopButton.disabled = true;
+
     showMessage("Analyse de la photo…");
 
     try {
@@ -454,11 +486,13 @@
         decoded.getText(),
         decoded.getBarcodeFormat()
       );
+
     } catch (error) {
       showMessage(
         "Aucun code-barres lisible trouvé sur cette photo. Essaie une image plus nette, rapprochée et sans reflet.",
         "error"
       );
+
     } finally {
       if (codeReader) {
         codeReader.reset();
@@ -469,6 +503,13 @@
       processing = false;
 
       video.pause();
+
+      if (video.srcObject) {
+        video.srcObject.getTracks().forEach(track => {
+          track.stop();
+        });
+      }
+
       video.srcObject = null;
 
       startButton.disabled = false;
@@ -487,14 +528,23 @@
         codeReader.reset();
       }
 
+      if (video.srcObject) {
+        video.srcObject.getTracks().forEach(track => {
+          track.stop();
+        });
+      }
+
       if (imageUrl) {
         URL.revokeObjectURL(imageUrl);
       }
+
     } catch (_) {
-      // Nettoyage de la caméra à la fermeture.
+      // Nettoyage à la fermeture.
     }
   });
+
 })();
 </script>
 </body>
 </html>
+```
