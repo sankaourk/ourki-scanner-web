@@ -1,0 +1,109 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ourki BoutikPro — Test Scanbot</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      background: #f3f6f4;
+      color: #17251d;
+    }
+    main {
+      max-width: 520px;
+      margin: auto;
+      padding: 20px;
+      background: white;
+      border-radius: 16px;
+    }
+    button {
+      width: 100%;
+      padding: 15px;
+      margin: 8px 0;
+      border: 0;
+      border-radius: 10px;
+      background: #176b45;
+      color: white;
+      font-size: 16px;
+    }
+    #status {
+      padding: 12px;
+      background: #edf5ef;
+      border-radius: 8px;
+      overflow-wrap: anywhere;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h2>Scanner professionnel — Test</h2>
+  <p>Test indépendant : aucune connexion au catalogue,
+     aux ventes, au stock ou à la base de données.</p>
+  <button id="start">Démarrer le scanner</button>
+  <div id="status">Chargement du moteur…</div>
+  <div id="result"></div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/scanbot-web-sdk@7.1.0/bundle/ScanbotSDK.ui2.min.js"></script>
+<script>
+(async function () {
+  const status = document.getElementById("status");
+  const resultBox = document.getElementById("result");
+  const startButton = document.getElementById("start");
+
+  function showStatus(message) {
+    status.textContent = message;
+  }
+
+  if (!window.ScanbotSDK) {
+    showStatus("Erreur : le moteur Scanbot ne s’est pas chargé. Vérifie la connexion Internet.");
+    startButton.disabled = true;
+    return;
+  }
+
+  showStatus("Moteur chargé. Appuie sur Démarrer le scanner.");
+
+  startButton.addEventListener("click", async function () {
+    startButton.disabled = true;
+    resultBox.textContent = "";
+    showStatus("Initialisation du scanner…");
+
+    try {
+      await ScanbotSDK.initialize({
+        licenseKey: "",
+        enginePath: "https://cdn.jsdelivr.net/npm/scanbot-web-sdk@7.1.0/bundle/bin/barcode-scanner/"
+      });
+
+      showStatus("Ouverture de la caméra…");
+
+      const config =
+        new ScanbotSDK.UI.Config.BarcodeScannerScreenConfiguration();
+
+      const scanResult =
+        await ScanbotSDK.UI.createBarcodeScanner(config);
+
+      if (!scanResult || !scanResult.items || scanResult.items.length === 0) {
+        showStatus("Aucun code lu. Tu peux recommencer.");
+      } else {
+        const codes = scanResult.items.map(function (item) {
+          return item.barcode ? item.barcode.text : JSON.stringify(item);
+        });
+
+        showStatus("Code(s) détecté(s) :");
+        resultBox.textContent = codes.join("\n");
+        resultBox.style.whiteSpace = "pre-wrap";
+      }
+    } catch (error) {
+      showStatus("Erreur du scanner : " + (error.message || String(error)));
+    } finally {
+      startButton.disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>
