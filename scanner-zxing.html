@@ -1,550 +1,309 @@
-```html
+html
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#123b2a">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ourki BoutikPro - Scanner WASM</title>
 
-  <title>Ourki BoutikPro - Scanner ZXing</title>
+<script src="https://cdn.jsdelivr.net/npm/zxing-wasm@2.2.1/dist/iife/reader/index.js"></script>
 
-  <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-
-  <style>
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      padding: 16px;
-      font-family: Arial, sans-serif;
-      color: #17251d;
-      background: #f3f6f4;
-    }
-
-    main {
-      max-width: 520px;
-      margin: 0 auto;
-      padding: 20px;
-      background: #fff;
-      border-radius: 16px;
-      box-shadow: 0 4px 18px #00000012;
-    }
-
-    h1 {
-      text-align: center;
-      font-size: 26px;
-    }
-
-    p {
-      line-height: 1.5;
-    }
-
-    .note {
-      color: #52645a;
-      font-size: 14px;
-    }
-
-    button,
-    .file-label {
-      display: block;
-      width: 100%;
-      padding: 15px;
-      margin-top: 12px;
-      border: 0;
-      border-radius: 10px;
-      background: #176b43;
-      color: #fff;
-      font-size: 16px;
-      font-weight: bold;
-      text-align: center;
-      cursor: pointer;
-    }
-
-    #stop {
-      background: #52645a;
-    }
-
-    .file-label {
-      background: #244e83;
-    }
-
-    button:disabled {
-      opacity: .5;
-      cursor: not-allowed;
-    }
-
-    #reader {
-      width: 100%;
-      margin-top: 18px;
-      overflow: hidden;
-      border-radius: 12px;
-      background: #101510;
-    }
-
-    #video-preview {
-      display: block;
-      width: 100%;
-      min-height: 220px;
-      max-height: 65vh;
-      aspect-ratio: 4 / 3;
-      object-fit: contain;
-      background: #101510;
-    }
-
-    #photo {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      opacity: 0;
-      overflow: hidden;
-    }
-
-    #preview {
-      display: none;
-      width: 100%;
-      max-height: 350px;
-      margin-top: 14px;
-      object-fit: contain;
-      border-radius: 10px;
-    }
-
-    #result {
-      margin-top: 18px;
-      padding: 15px;
-      border-radius: 10px;
-      background: #edf5ef;
-      overflow-wrap: anywhere;
-      line-height: 1.5;
-    }
-
-    #result.success {
-      background: #dff5e6;
-      color: #145b32;
-    }
-
-    #result.error {
-      background: #fff0ed;
-      color: #8b2519;
-    }
-
-    .code {
-      display: block;
-      margin-top: 8px;
-      font-size: 24px;
-      font-weight: bold;
-      overflow-wrap: anywhere;
-    }
-  </style>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:16px;background:#f3f6f4;color:#17251d;font-family:Arial,sans-serif}
+main{max-width:540px;margin:auto;padding:20px;background:#fff;border-radius:16px}
+h1{text-align:center;font-size:25px}
+p{line-height:1.5}
+.note{font-size:14px;color:#52645a}
+button,.file-label{display:block;width:100%;padding:15px;margin-top:12px;border:0;border-radius:10px;background:#176b43;color:white;font-size:16px;font-weight:bold;text-align:center;cursor:pointer}
+#stop{background:#52645a}
+.file-label{background:#244e83}
+button:disabled{opacity:.5}
+#camera{display:block;width:100%;margin-top:18px;background:#101510;border-radius:12px;min-height:220px;max-height:65vh;object-fit:contain;aspect-ratio:4/3}
+#photo{position:absolute;width:1px;height:1px;opacity:0}
+#preview{display:none;width:100%;max-height:350px;margin-top:14px;object-fit:contain}
+#result{margin-top:18px;padding:15px;border-radius:10px;background:#edf5ef;overflow-wrap:anywhere;line-height:1.5}
+#result.success{background:#dff5e6;color:#145b32}
+#result.error{background:#fff0ed;color:#8b2519}
+.code{display:block;margin-top:8px;font-size:24px;font-weight:bold}
+</style>
 </head>
 
 <body>
 <main>
+<h1>Ourki BoutikPro</h1>
 
-  <h1>Ourki BoutikPro</h1>
+<p>Test du nouveau moteur de lecture de codes-barres.</p>
+<p class="note">Autorise la caméra dans Safari. Garde le code-barres éclairé et face à la caméra.</p>
 
-  <p>
-    Test indépendant du moteur de lecture ZXing.
-  </p>
+<button id="start" type="button">Démarrer la caméra</button>
+<button id="stop" type="button" disabled>Arrêter la caméra</button>
 
-  <p class="note">
-    Autorise la caméra dans Safari.
-    Oriente le code-barres vers la caméra
-    et garde-le bien éclairé.
-  </p>
+<label class="file-label" for="photo">Lire une photo de code-barres</label>
+<input id="photo" type="file" accept="image/*" capture="environment">
 
-  <button id="start" type="button">
-    Démarrer la caméra
-  </button>
+<video id="camera" autoplay muted playsinline></video>
+<img id="preview" alt="Photo analysée">
 
-  <button id="stop" type="button" disabled>
-    Arrêter la caméra
-  </button>
+<div id="result" role="status" aria-live="polite">
+Chargement du moteur…
+</div>
 
-  <label class="file-label" for="photo">
-    Lire une photo de code-barres
-  </label>
-
-  <input
-    id="photo"
-    type="file"
-    accept="image/*"
-    capture="environment"
-  >
-
-  <img id="preview" alt="Photo analysée">
-
-  <div id="reader">
-    <video
-      id="video-preview"
-      autoplay
-      muted
-      playsinline
-    ></video>
-  </div>
-
-  <div id="result" role="status" aria-live="polite">
-    Prêt pour le test.
-  </div>
-
-  <p class="note">
-    Cette page de test affiche uniquement le numéro
-    du code-barres. Elle n'est pas reliée au catalogue
-    ni au panier de la boutique.
-  </p>
-
+<p class="note">
+Test indépendant : aucune connexion au catalogue, aux ventes ou à la base de données.
+</p>
 </main>
 
 <script>
 (() => {
-  "use strict";
+"use strict";
 
-  const startButton = document.getElementById("start");
-  const stopButton = document.getElementById("stop");
-  const photoInput = document.getElementById("photo");
-  const preview = document.getElementById("preview");
-  const video = document.getElementById("video-preview");
-  const result = document.getElementById("result");
+const startButton = document.getElementById("start");
+const stopButton = document.getElementById("stop");
+const photoInput = document.getElementById("photo");
+const video = document.getElementById("camera");
+const preview = document.getElementById("preview");
+const result = document.getElementById("result");
 
-  let codeReader = null;
-  let controls = null;
-  let running = false;
-  let starting = false;
-  let stopping = false;
-  let processing = false;
-  let imageUrl = null;
+const options = {
+  tryHarder: true,
+  tryRotate: true,
+  formats: [
+    "EAN13", "EAN8", "UPCA", "UPCE",
+    "Code128", "Code39", "ITF", "QRCode"
+  ],
+  maxNumberOfSymbols: 5
+};
 
-  function showMessage(text, type = "") {
-    result.className = type;
-    result.textContent = text;
-  }
+let stream = null;
+let running = false;
+let scanning = false;
+let timer = null;
+let photoUrl = null;
 
-  function showCode(text, format) {
-    result.className = "success";
+function message(text, type = "") {
+  result.className = type;
+  result.textContent = text;
+}
 
-    result.replaceChildren(
-      document.createTextNode(
-        "Code détecté" +
-        (format ? " (" + format + ")" : "") +
-        " :"
-      )
+function displayCode(text, format) {
+  result.className = "success";
+  result.replaceChildren(
+    document.createTextNode(
+      "Code détecté" + (format ? " (" + format + ")" : "") + " :"
+    )
+  );
+
+  const span = document.createElement("span");
+  span.className = "code";
+  span.textContent = text;
+  result.appendChild(span);
+
+  try {
+    if (navigator.vibrate) navigator.vibrate(100);
+  } catch (_) {}
+}
+
+function checkEngine() {
+  if (
+    !window.ZXingWASM ||
+    typeof window.ZXingWASM.readBarcodes !== "function"
+  ) {
+    throw new Error(
+      "Le moteur ne s'est pas chargé. Vérifie Internet et recharge la page."
     );
+  }
+}
 
-    const value = document.createElement("span");
-    value.className = "code";
-    value.textContent = text;
+async function stopCamera(showStatus = true) {
+  running = false;
 
-    result.appendChild(value);
-
-    if (navigator.vibrate) {
-      try {
-        navigator.vibrate(100);
-      } catch (_) {
-        // Vibration facultative.
-      }
-    }
+  if (timer !== null) {
+    clearTimeout(timer);
+    timer = null;
   }
 
-  function createReader() {
-    const hints = new Map();
-
-    // Essayer tous les formats pris en charge
-    // au lieu de limiter le test à quelques formats.
-    hints.set(
-      ZXing.DecodeHintType.TRY_HARDER,
-      true
-    );
-
-    return new ZXing.BrowserMultiFormatReader(hints);
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
+    stream = null;
   }
 
-  async function stopCamera(showStatus = true) {
-    if (stopping) return;
+  video.pause();
+  video.srcObject = null;
 
-    stopping = true;
+  startButton.disabled = false;
+  stopButton.disabled = true;
 
-    try {
-      if (controls) {
-        controls.stop();
-        controls = null;
-      }
+  if (showStatus) message("Caméra arrêtée.");
+}
 
-      if (codeReader) {
-        codeReader.reset();
-      }
+async function scanFrame() {
+  if (!running || scanning) return;
 
-      running = false;
-      processing = false;
-
-      video.pause();
-
-      if (video.srcObject) {
-        video.srcObject.getTracks().forEach(track => {
-          track.stop();
-        });
-      }
-
-      video.srcObject = null;
-
-      startButton.disabled = false;
-      stopButton.disabled = true;
-
-      if (showStatus) {
-        showMessage("Caméra arrêtée.");
-      }
-
-    } catch (error) {
-      running = false;
-      startButton.disabled = false;
-      stopButton.disabled = true;
-
-      showMessage(
-        "Erreur lors de l'arrêt de la caméra. Recharge la page si nécessaire.",
-        "error"
-      );
-
-    } finally {
-      stopping = false;
-    }
+  if (video.readyState < 2 || !video.videoWidth) {
+    timer = setTimeout(scanFrame, 250);
+    return;
   }
 
-  startButton.addEventListener("click", async () => {
-    if (starting || running || stopping) return;
+  scanning = true;
 
-    if (!window.isSecureContext) {
-      showMessage(
-        "La caméra nécessite une connexion HTTPS.",
-        "error"
-      );
-      return;
-    }
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
 
-    if (
-      !window.ZXing ||
-      !window.ZXing.BrowserMultiFormatReader
-    ) {
-      showMessage(
-        "Le moteur ZXing n'est pas chargé. Vérifie Internet et recharge la page.",
-        "error"
-      );
-      return;
-    }
+    const context = canvas.getContext("2d");
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    starting = true;
-    processing = false;
+    const blob = await new Promise(resolve => {
+      canvas.toBlob(resolve, "image/jpeg", 0.92);
+    });
 
-    startButton.disabled = true;
-    stopButton.disabled = true;
-
-    showMessage("Ouverture de la caméra arrière…");
-
-    try {
-      if (codeReader) {
-        codeReader.reset();
-      }
-
-      codeReader = createReader();
-
-      // Demander la caméra arrière et une résolution élevée.
-      const constraints = {
-        audio: false,
-        video: {
-          facingMode: {
-            ideal: "environment"
-          },
-          width: {
-            ideal: 1920
-          },
-          height: {
-            ideal: 1080
-          }
-        }
-      };
-
-      controls = await codeReader.decodeFromConstraints(
-        constraints,
-        video,
-        (decoded, error) => {
-          if (decoded && !processing) {
-            processing = true;
-
-            showCode(
-              decoded.getText(),
-              decoded.getBarcodeFormat()
-            );
-
-            stopCamera(false);
-          }
-
-          // L'absence de code dans une image est normale.
-        }
+    if (blob && running) {
+      const codes = await window.ZXingWASM.readBarcodes(
+        blob,
+        options
       );
 
-      running = true;
-      stopButton.disabled = false;
+      const found = codes && codes.find(code => code.text);
 
-      showMessage(
-        "Caméra active. Garde le code-barres dans l'image quelques secondes."
-      );
-
-    } catch (error) {
-      running = false;
-      controls = null;
-
-      startButton.disabled = false;
-      stopButton.disabled = true;
-
-      showMessage(
-        "Impossible de démarrer la lecture : " +
-        (
-          error && error.message
-            ? error.message
-            : String(error)
-        ),
-        "error"
-      );
-
-    } finally {
-      starting = false;
-    }
-  });
-
-  stopButton.addEventListener("click", async () => {
-    if (starting) return;
-
-    await stopCamera();
-  });
-
-  photoInput.addEventListener("change", async () => {
-    const file =
-      photoInput.files && photoInput.files[0];
-
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-      showMessage(
-        "Choisis un fichier image valide.",
-        "error"
-      );
-
-      photoInput.value = "";
-      return;
-    }
-
-    if (
-      !window.ZXing ||
-      !window.ZXing.BrowserMultiFormatReader
-    ) {
-      showMessage(
-        "Le moteur ZXing n'est pas chargé. Vérifie Internet.",
-        "error"
-      );
-
-      photoInput.value = "";
-      return;
-    }
-
-    if (starting || stopping) {
-      photoInput.value = "";
-      return;
-    }
-
-    startButton.disabled = true;
-    stopButton.disabled = true;
-
-    showMessage("Analyse de la photo…");
-
-    try {
-      if (running || controls) {
+      if (found && running) {
+        displayCode(found.text, found.format);
         await stopCamera(false);
+        return;
       }
+    }
+  } catch (error) {
+    message(
+      "Erreur de lecture : " +
+      (error.message || String(error)),
+      "error"
+    );
+  } finally {
+    scanning = false;
 
-      if (codeReader) {
-        codeReader.reset();
+    if (running) {
+      timer = setTimeout(scanFrame, 250);
+    }
+  }
+}
+
+startButton.addEventListener("click", async () => {
+  if (running) return;
+
+  startButton.disabled = true;
+  stopButton.disabled = true;
+  message("Ouverture de la caméra arrière…");
+
+  try {
+    checkEngine();
+
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
       }
+    });
 
-      codeReader = createReader();
+    video.srcObject = stream;
+    await video.play();
 
-      if (imageUrl) {
-        URL.revokeObjectURL(imageUrl);
-      }
+    running = true;
+    stopButton.disabled = false;
 
-      imageUrl = URL.createObjectURL(file);
-      preview.style.display = "block";
+    message("Caméra active. Recherche du code-barres…");
+    scanFrame();
 
-      await new Promise((resolve, reject) => {
-        preview.onload = resolve;
-        preview.onerror = reject;
-        preview.src = imageUrl;
-      });
+  } catch (error) {
+    await stopCamera(false);
 
-      const decoded =
-        await codeReader.decodeFromImageElement(preview);
+    message(
+      "Impossible de démarrer : " +
+      (error.message || String(error)),
+      "error"
+    );
+  }
+});
 
-      showCode(
-        decoded.getText(),
-        decoded.getBarcodeFormat()
-      );
+stopButton.addEventListener("click", () => {
+  stopCamera();
+});
 
-    } catch (error) {
-      showMessage(
-        "Aucun code-barres lisible trouvé sur cette photo. Essaie une image plus nette, rapprochée et sans reflet.",
+photoInput.addEventListener("change", async () => {
+  const file = photoInput.files && photoInput.files[0];
+  if (!file) return;
+
+  try {
+    checkEngine();
+    await stopCamera(false);
+
+    message("Analyse de la photo…");
+
+    if (photoUrl) URL.revokeObjectURL(photoUrl);
+
+    photoUrl = URL.createObjectURL(file);
+    preview.style.display = "block";
+
+    await new Promise((resolve, reject) => {
+      preview.onload = resolve;
+      preview.onerror = reject;
+      preview.src = photoUrl;
+    });
+
+    const codes = await window.ZXingWASM.readBarcodes(
+      file,
+      options
+    );
+
+    const found = codes && codes.find(code => code.text);
+
+    if (found) {
+      displayCode(found.text, found.format);
+    } else {
+      message(
+        "Aucun code détecté sur cette photo.",
         "error"
       );
-
-    } finally {
-      if (codeReader) {
-        codeReader.reset();
-      }
-
-      controls = null;
-      running = false;
-      processing = false;
-
-      video.pause();
-
-      if (video.srcObject) {
-        video.srcObject.getTracks().forEach(track => {
-          track.stop();
-        });
-      }
-
-      video.srcObject = null;
-
-      startButton.disabled = false;
-      stopButton.disabled = true;
-      photoInput.value = "";
     }
-  });
 
-  window.addEventListener("pagehide", () => {
-    try {
-      if (controls) {
-        controls.stop();
-      }
+  } catch (error) {
+    message(
+      "Erreur pendant l'analyse : " +
+      (error.message || String(error)),
+      "error"
+    );
+  } finally {
+    photoInput.value = "";
+  }
+});
 
-      if (codeReader) {
-        codeReader.reset();
-      }
+window.addEventListener("pagehide", () => {
+  if (timer !== null) clearTimeout(timer);
 
-      if (video.srcObject) {
-        video.srcObject.getTracks().forEach(track => {
-          track.stop();
-        });
-      }
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
+  }
 
-      if (imageUrl) {
-        URL.revokeObjectURL(imageUrl);
-      }
+  if (photoUrl) URL.revokeObjectURL(photoUrl);
+});
 
-    } catch (_) {
-      // Nettoyage à la fermeture.
-    }
-  });
+window.addEventListener("load", () => {
+  if (
+    window.ZXingWASM &&
+    typeof window.ZXingWASM.readBarcodes === "function"
+  ) {
+    message("Moteur chargé. Prêt pour le test.");
+  } else {
+    message(
+      "Le moteur ne s'est pas chargé. Vérifie Internet puis recharge.",
+      "error"
+    );
+  }
+});
 
 })();
 </script>
 </body>
 </html>
-```
