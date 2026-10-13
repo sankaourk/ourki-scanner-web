@@ -1,0 +1,309 @@
+html
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ourki BoutikPro - Scanner WASM</title>
+
+<script src="https://cdn.jsdelivr.net/npm/zxing-wasm@2.2.1/dist/iife/reader/index.js"></script>
+
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:16px;background:#f3f6f4;color:#17251d;font-family:Arial,sans-serif}
+main{max-width:540px;margin:auto;padding:20px;background:#fff;border-radius:16px}
+h1{text-align:center;font-size:25px}
+p{line-height:1.5}
+.note{font-size:14px;color:#52645a}
+button,.file-label{display:block;width:100%;padding:15px;margin-top:12px;border:0;border-radius:10px;background:#176b43;color:white;font-size:16px;font-weight:bold;text-align:center;cursor:pointer}
+#stop{background:#52645a}
+.file-label{background:#244e83}
+button:disabled{opacity:.5}
+#camera{display:block;width:100%;margin-top:18px;background:#101510;border-radius:12px;min-height:220px;max-height:65vh;object-fit:contain;aspect-ratio:4/3}
+#photo{position:absolute;width:1px;height:1px;opacity:0}
+#preview{display:none;width:100%;max-height:350px;margin-top:14px;object-fit:contain}
+#result{margin-top:18px;padding:15px;border-radius:10px;background:#edf5ef;overflow-wrap:anywhere;line-height:1.5}
+#result.success{background:#dff5e6;color:#145b32}
+#result.error{background:#fff0ed;color:#8b2519}
+.code{display:block;margin-top:8px;font-size:24px;font-weight:bold}
+</style>
+</head>
+
+<body>
+<main>
+<h1>Ourki BoutikPro</h1>
+
+<p>Test du nouveau moteur de lecture de codes-barres.</p>
+<p class="note">Autorise la caméra dans Safari. Garde le code-barres éclairé et face à la caméra.</p>
+
+<button id="start" type="button">Démarrer la caméra</button>
+<button id="stop" type="button" disabled>Arrêter la caméra</button>
+
+<label class="file-label" for="photo">Lire une photo de code-barres</label>
+<input id="photo" type="file" accept="image/*" capture="environment">
+
+<video id="camera" autoplay muted playsinline></video>
+<img id="preview" alt="Photo analysée">
+
+<div id="result" role="status" aria-live="polite">
+Chargement du moteur…
+</div>
+
+<p class="note">
+Test indépendant : aucune connexion au catalogue, aux ventes ou à la base de données.
+</p>
+</main>
+
+<script>
+(() => {
+"use strict";
+
+const startButton = document.getElementById("start");
+const stopButton = document.getElementById("stop");
+const photoInput = document.getElementById("photo");
+const video = document.getElementById("camera");
+const preview = document.getElementById("preview");
+const result = document.getElementById("result");
+
+const options = {
+  tryHarder: true,
+  tryRotate: true,
+  formats: [
+    "EAN13", "EAN8", "UPCA", "UPCE",
+    "Code128", "Code39", "ITF", "QRCode"
+  ],
+  maxNumberOfSymbols: 5
+};
+
+let stream = null;
+let running = false;
+let scanning = false;
+let timer = null;
+let photoUrl = null;
+
+function message(text, type = "") {
+  result.className = type;
+  result.textContent = text;
+}
+
+function displayCode(text, format) {
+  result.className = "success";
+  result.replaceChildren(
+    document.createTextNode(
+      "Code détecté" + (format ? " (" + format + ")" : "") + " :"
+    )
+  );
+
+  const span = document.createElement("span");
+  span.className = "code";
+  span.textContent = text;
+  result.appendChild(span);
+
+  try {
+    if (navigator.vibrate) navigator.vibrate(100);
+  } catch (_) {}
+}
+
+function checkEngine() {
+  if (
+    !window.ZXingWASM ||
+    typeof window.ZXingWASM.readBarcodes !== "function"
+  ) {
+    throw new Error(
+      "Le moteur ne s'est pas chargé. Vérifie Internet et recharge la page."
+    );
+  }
+}
+
+async function stopCamera(showStatus = true) {
+  running = false;
+
+  if (timer !== null) {
+    clearTimeout(timer);
+    timer = null;
+  }
+
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
+    stream = null;
+  }
+
+  video.pause();
+  video.srcObject = null;
+
+  startButton.disabled = false;
+  stopButton.disabled = true;
+
+  if (showStatus) message("Caméra arrêtée.");
+}
+
+async function scanFrame() {
+  if (!running || scanning) return;
+
+  if (video.readyState < 2 || !video.videoWidth) {
+    timer = setTimeout(scanFrame, 250);
+    return;
+  }
+
+  scanning = true;
+
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const context = canvas.getContext("2d");
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise(resolve => {
+      canvas.toBlob(resolve, "image/jpeg", 0.92);
+    });
+
+    if (blob && running) {
+      const codes = await window.ZXingWASM.readBarcodes(
+        blob,
+        options
+      );
+
+      const found = codes && codes.find(code => code.text);
+
+      if (found && running) {
+        displayCode(found.text, found.format);
+        await stopCamera(false);
+        return;
+      }
+    }
+  } catch (error) {
+    message(
+      "Erreur de lecture : " +
+      (error.message || String(error)),
+      "error"
+    );
+  } finally {
+    scanning = false;
+
+    if (running) {
+      timer = setTimeout(scanFrame, 250);
+    }
+  }
+}
+
+startButton.addEventListener("click", async () => {
+  if (running) return;
+
+  startButton.disabled = true;
+  stopButton.disabled = true;
+  message("Ouverture de la caméra arrière…");
+
+  try {
+    checkEngine();
+
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
+      }
+    });
+
+    video.srcObject = stream;
+    await video.play();
+
+    running = true;
+    stopButton.disabled = false;
+
+    message("Caméra active. Recherche du code-barres…");
+    scanFrame();
+
+  } catch (error) {
+    await stopCamera(false);
+
+    message(
+      "Impossible de démarrer : " +
+      (error.message || String(error)),
+      "error"
+    );
+  }
+});
+
+stopButton.addEventListener("click", () => {
+  stopCamera();
+});
+
+photoInput.addEventListener("change", async () => {
+  const file = photoInput.files && photoInput.files[0];
+  if (!file) return;
+
+  try {
+    checkEngine();
+    await stopCamera(false);
+
+    message("Analyse de la photo…");
+
+    if (photoUrl) URL.revokeObjectURL(photoUrl);
+
+    photoUrl = URL.createObjectURL(file);
+    preview.style.display = "block";
+
+    await new Promise((resolve, reject) => {
+      preview.onload = resolve;
+      preview.onerror = reject;
+      preview.src = photoUrl;
+    });
+
+    const codes = await window.ZXingWASM.readBarcodes(
+      file,
+      options
+    );
+
+    const found = codes && codes.find(code => code.text);
+
+    if (found) {
+      displayCode(found.text, found.format);
+    } else {
+      message(
+        "Aucun code détecté sur cette photo.",
+        "error"
+      );
+    }
+
+  } catch (error) {
+    message(
+      "Erreur pendant l'analyse : " +
+      (error.message || String(error)),
+      "error"
+    );
+  } finally {
+    photoInput.value = "";
+  }
+});
+
+window.addEventListener("pagehide", () => {
+  if (timer !== null) clearTimeout(timer);
+
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
+  }
+
+  if (photoUrl) URL.revokeObjectURL(photoUrl);
+});
+
+window.addEventListener("load", () => {
+  if (
+    window.ZXingWASM &&
+    typeof window.ZXingWASM.readBarcodes === "function"
+  ) {
+    message("Moteur chargé. Prêt pour le test.");
+  } else {
+    message(
+      "Le moteur ne s'est pas chargé. Vérifie Internet puis recharge.",
+      "error"
+    );
+  }
+});
+
+})();
+</script>
+</body>
+</html>
